@@ -1,23 +1,90 @@
-#!/bin/sh
+#!/usr/bin/ruby
+# coding: utf-8
 
-DELETE_DATE=$1
-TARGET_PREFIX=$2
+##
+## Load modules
 
-usage () {
-    echo "Usage: $0 datestrings targetdirprefix"
+#require 'getoptlong.rb'
+require 'date'
+require 'find'
+require 'fileutils'
+
+
+##
+## Global variables definition
+
+$OPTION = {}
+
+
+##
+## Functions definition
+
+def usage
+  print <<-EOS
+Usage: pdumprsync-clean [OPTION]... <date string> <target dir prefix>
+Clean up expired directories of pdumprsync dir structure
+
+-h, --help  Display this message
+  EOS
+  exit 1
+end
+
+def parse_options
+  # nothing to do
+end
+
+def find_entry(prefix_dir)
+  result = []
+  Find.find(prefix_dir) do |entry|
+    is_year = entry =~ /#{prefix_dir}\/\d{4}$/
+    is_month = entry =~ /#{prefix_dir}\/\d{4}\/\d{2}$/
+    is_day = entry =~ /#{prefix_dir}\/\d{4}\/\d{2}\/\d{2}$/
+    if entry != prefix_dir && ! is_year && ! is_month
+      result.push(entry.gsub(/^#{prefix_dir}\//, '')) if is_day
+      Find.prune
+    end
+  end
+  return result
+end
+
+
+##
+## Main
+
+def main
+  parse_options
+  usage if ARGV.length < 2
+
+  threshold = `date --date="#{ARGV[0]}" +%Y-%m-%d 2>/dev/null`
+  if $? != 0
+    $stderr.print "ERROR, invalid date string '#{ARGV[0]}'\n"
     exit 1
-}
+  end
+  threshold = Date.parse(threshold)
 
-if [ -z "$DELETE_DATE" ] || [ -z "$TARGET_PREFIX" ]; then
-    usage
-fi
-
-TARGET="$TARGET_PREFIX/`date --date \"$DELETE_DATE\" '+%Y/%m/%d'`"
-if [ ! -d $TARGET ]; then
-    echo "target directory: $TARGET is not exist, abort."
+  target_prefix = ARGV[1]
+  unless File.directory?(target_prefix)
+    $stderr.print "ERROR, target dir prefix '#{target_prefix}' is not exist.\n"
     exit 1
-fi
+  end
 
-echo "Now deleting file in dir: $TARGET ..."
-rm -r $TARGET
-echo "... Done."
+  do_remove = false
+  find_entry(target_prefix).each do |dirname|
+    target_date = Date.parse(dirname)
+    if threshold >= target_date
+      print "Now deleting file in dir: #{target_prefix}/#{dirname}\n"
+      FileUtils.remove_entry "#{target_prefix}/#{dirname}"
+      do_remove = true
+    end
+  end
+  remove_empty_dir =  "find #{target_prefix}"
+  remove_empty_dir += " -depth -maxdepth 2 -type d -empty"
+  remove_empty_dir += " -exec rm -rv {} \\;"
+  cmd_env = { 'LANG' => 'C' }
+  system(cmd_env, remove_empty_dir) if do_remove
+end
+
+main
+
+
+## EOF
