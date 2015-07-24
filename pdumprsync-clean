@@ -1,0 +1,23 @@
+#!/bin/sh
+
+DELETE_DATE=$1
+TARGET_PREFIX=$2
+
+usage () {
+    echo "Usage: $0 datestrings targetdirprefix"
+    exit 1
+}
+
+if [ -z "$DELETE_DATE" ] || [ -z "$TARGET_PREFIX" ]; then
+    usage
+fi
+
+TARGET="$TARGET_PREFIX/`date --date \"$DELETE_DATE\" '+%Y/%m/%d'`"
+if [ ! -d $TARGET ]; then
+    echo "target directory: $TARGET is not exist, abort."
+    exit 1
+fi
+
+echo "Now deleting file in dir: $TARGET ..."
+rm -r $TARGET
+echo "... Done."
