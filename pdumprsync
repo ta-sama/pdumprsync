@@ -1,0 +1,66 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+    echo "Usage: pdumprsync [options] SRC DEST"
+    echo "  -e PATTERN	exclude files/directories matching PATTERN"
+    echo "  -h		show this help message"
+}
+
+if [ ! -x /usr/bin/rsync ]; then
+    echo "rsync was not found." 1>&2
+    exit 1
+fi
+
+RSYNC_OPTIONS="-avv --delete "
+while getopts "he:" OPTS; do
+    case $OPTS in
+	e)
+	    RSYNC_OPTIONS="$RSYNC_OPTIONS --exclude=$OPTARG"
+	    ;;
+	h)
+	    usage
+	    exit 0
+	    ;;
+	?)
+	    usage
+	    exit 1
+	    ;;
+    esac
+done
+shift $((OPTIND-1))
+
+SRC=$1
+BASENAME=`basename $SRC`
+DEST=$2
+
+if [ ! -d $DEST ]; then
+    mkdir -p "$DEST"
+fi
+
+cd "$DEST"
+
+TODAY=`date '+%Y/%m/%d'`
+if [ ! -d "$TODAY" ]; then
+    mkdir -p "$TODAY"
+    chmod 700 "`date '+%Y'`"
+    chmod 700 "`date '+%Y/%m'`"
+    chmod 700 "`date '+%Y/%m/%d'`"
+fi
+
+ln -sf -T "$TODAY" ./latest
+
+for (( i = 1; i <= 31; i++ )); do
+    LINK_DEST_DATE=`date --date="$i days ago" '+%Y/%m/%d'`
+    if [ -d "$LINK_DEST_DATE/$BASENAME" ]; then
+	break
+    fi
+    LINK_DEST_DATE=""
+done
+
+if [ "$LINK_DEST_DATE" ]; then
+    rsync $RSYNC_OPTIONS --link-dest="../../../$LINK_DEST_DATE" "$SRC" "$DEST/$TODAY/"
+else
+    rsync $RSYNC_OPTIONS "$SRC" "$DEST/$TODAY/"
+fi
