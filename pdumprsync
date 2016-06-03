@@ -13,7 +13,7 @@ if [ ! -x /usr/bin/rsync ]; then
     exit 1
 fi
 
-RSYNC_OPTIONS="-avv --delete "
+RSYNC_OPTIONS="-avv --one-file-system --delete "
 while getopts "he:" OPTS; do
     case $OPTS in
 	e)
