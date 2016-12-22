@@ -5,6 +5,9 @@ set -e
 usage() {
     echo "Usage: pdumprsync [options] SRC DEST"
     echo "  -e PATTERN	exclude files/directories matching PATTERN"
+    echo "  -o OWNER    OWNER of destination directory"
+    echo "  -g GROUP    GROPU of destination directory"
+    echo "  -p MODE     permission MODE of destination directory"
     echo "  -h		show this help message"
 }
 
@@ -14,10 +17,19 @@ if [ ! -x /usr/bin/rsync ]; then
 fi
 
 RSYNC_OPTIONS="-avv --one-file-system --delete "
-while getopts "he:" OPTS; do
+while getopts "he:o:g:p:" OPTS; do
     case $OPTS in
 	e)
 	    RSYNC_OPTIONS="$RSYNC_OPTIONS --exclude=$OPTARG"
+	    ;;
+	o)
+	    DEST_OWNER="$OPTARG"
+	    ;;
+	g)
+	    DEST_GROUP="$OPTARG"
+	    ;;
+	p)
+	    DEST_MODE="$OPTARG"
 	    ;;
 	h)
 	    usage
@@ -44,9 +56,25 @@ cd "$DEST"
 TODAY=`date '+%Y/%m/%d'`
 if [ ! -d "$TODAY" ]; then
     mkdir -p "$TODAY"
-    chmod 700 "`date '+%Y'`"
-    chmod 700 "`date '+%Y/%m'`"
-    chmod 700 "`date '+%Y/%m/%d'`"
+    if [ -n "$DEST_OWNER" ]; then
+	chown $DEST_OWNER "`date '+%Y'`"
+	chown $DEST_OWNER "`date '+%Y/%m'`"
+	chown $DEST_OWNER "`date '+%Y/%m/%d'`"
+    fi
+    if [ -n "$DEST_GROUP" ]; then
+	chgrp $DEST_GROUP "`date '+%Y'`"
+	chgrp $DEST_GROUP "`date '+%Y/%m'`"
+	chgrp $DEST_GROUP "`date '+%Y/%m/%d'`"
+    fi
+    if [ -n "$DEST_MODE" ]; then
+	chmod $DEST_MODE "`date '+%Y'`"
+	chmod $DEST_MODE "`date '+%Y/%m'`"
+	chmod $DEST_MODE "`date '+%Y/%m/%d'`"
+    else
+	chmod 700 "`date '+%Y'`"
+	chmod 700 "`date '+%Y/%m'`"
+	chmod 700 "`date '+%Y/%m/%d'`"
+    fi
 fi
 
 ln -sf -T "$TODAY" ./latest
