@@ -3,12 +3,17 @@
 set -e
 
 usage() {
-    echo "Usage: pdumprsync [options] SRC DEST"
-    echo "  -e PATTERN	exclude files/directories matching PATTERN"
-    echo "  -o OWNER    OWNER of destination directory"
-    echo "  -g GROUP    GROPU of destination directory"
-    echo "  -p MODE     permission MODE of destination directory"
-    echo "  -h		show this help message"
+    cat <<EOS
+Usage: $(basename $0) [options] SRC DEST
+  -e PATTERN  exclude files/directories matching PATTERN
+  -o OWNER    OWNER of destination directory
+  -g GROUP    GROPU of destination directory
+  -p MODE     permission MODE of destination directory
+  -i NUM      number of days to check latest backup
+  -n          dry run
+  -v          verbose output
+  -h          show this help message
+EOS
 }
 
 if [ ! -x /usr/bin/rsync ]; then
@@ -16,79 +21,87 @@ if [ ! -x /usr/bin/rsync ]; then
     exit 1
 fi
 
+MAX_DAYS=31
 RSYNC_OPTIONS="-avv --one-file-system --delete "
-while getopts "he:o:g:p:" OPTS; do
+while getopts "he:o:g:p:i:nv" OPTS; do
     case $OPTS in
-	e)
-	    RSYNC_OPTIONS="$RSYNC_OPTIONS --exclude=$OPTARG"
-	    ;;
-	o)
-	    DEST_OWNER="$OPTARG"
-	    ;;
-	g)
-	    DEST_GROUP="$OPTARG"
-	    ;;
-	p)
-	    DEST_MODE="$OPTARG"
-	    ;;
-	h)
-	    usage
-	    exit 0
-	    ;;
-	?)
-	    usage
-	    exit 1
-	    ;;
+	e) RSYNC_OPTIONS="$RSYNC_OPTIONS --exclude=$OPTARG" ;;
+	o) DEST_OWNER="$OPTARG" ;;
+	g) DEST_GROUP="$OPTARG" ;;
+	p) DEST_MODE="$OPTARG" ;;
+	i) MAX_DAYS="$OPTARG" ;;
+	n) OPT_DRYRUN="yes" ;;
+	v) OPT_VERBOSE="yes" ;;
+	h) usage; exit 0 ;;
+	?) usage; exit 1 ;;
     esac
 done
 shift $((OPTIND-1))
+
+do_exec () {
+    [ -n "$OPT_VERBOSE" ] && echo "EXEC: [$@]"
+    if [ -z "$OPT_DRYRUN" ]; then "$@"; fi
+}
+force_exec () {
+    [ -n "$OPT_VERBOSE" ] && echo "EXEC: [$@]"
+    "$@"
+}
 
 SRC=$1
 BASENAME=`basename $SRC`
 DEST=$2
 
 if [ ! -d $DEST ]; then
-    mkdir -p "$DEST"
+    do_exec mkdir -p "$DEST"
 fi
 
-cd "$DEST"
+[ -n "$OPT_VERBOSE" ] && echo "EXEC: [pushd .]"
+pushd . >/dev/null
+
+do_exec cd "$DEST"
 
 TODAY=`date '+%Y/%m/%d'`
 if [ ! -d "$TODAY" ]; then
-    mkdir -p "$TODAY"
+    do_exec mkdir -p "$TODAY"
     if [ -n "$DEST_OWNER" ]; then
-	chown $DEST_OWNER "`date '+%Y'`"
-	chown $DEST_OWNER "`date '+%Y/%m'`"
-	chown $DEST_OWNER "`date '+%Y/%m/%d'`"
+	do_exec chown $DEST_OWNER "`date '+%Y'`"
+	do_exec chown $DEST_OWNER "`date '+%Y/%m'`"
+	do_exec chown $DEST_OWNER "`date '+%Y/%m/%d'`"
     fi
     if [ -n "$DEST_GROUP" ]; then
-	chgrp $DEST_GROUP "`date '+%Y'`"
-	chgrp $DEST_GROUP "`date '+%Y/%m'`"
-	chgrp $DEST_GROUP "`date '+%Y/%m/%d'`"
+	do_exec chgrp $DEST_GROUP "`date '+%Y'`"
+	do_exec chgrp $DEST_GROUP "`date '+%Y/%m'`"
+	do_exec chgrp $DEST_GROUP "`date '+%Y/%m/%d'`"
     fi
     if [ -n "$DEST_MODE" ]; then
-	chmod $DEST_MODE "`date '+%Y'`"
-	chmod $DEST_MODE "`date '+%Y/%m'`"
-	chmod $DEST_MODE "`date '+%Y/%m/%d'`"
+	do_exec chmod $DEST_MODE "`date '+%Y'`"
+	do_exec chmod $DEST_MODE "`date '+%Y/%m'`"
+	do_exec chmod $DEST_MODE "`date '+%Y/%m/%d'`"
     else
-	chmod 700 "`date '+%Y'`"
-	chmod 700 "`date '+%Y/%m'`"
-	chmod 700 "`date '+%Y/%m/%d'`"
+	do_exec chmod 700 "`date '+%Y'`"
+	do_exec chmod 700 "`date '+%Y/%m'`"
+	do_exec chmod 700 "`date '+%Y/%m/%d'`"
     fi
 fi
 
-ln -sf -T "$TODAY" ./latest
+do_exec ln -sf -T "$TODAY" ./latest
 
-for (( i = 1; i <= 31; i++ )); do
+[ -n "$OPT_VERBOSE" ] && echo "EXEC: [popd]"
+popd >/dev/null
+
+for i in $(seq 1 $MAX_DAYS); do
     LINK_DEST_DATE=`date --date="$i days ago" '+%Y/%m/%d'`
-    if [ -d "$LINK_DEST_DATE/$BASENAME" ]; then
+    if [ -d "$DEST/$LINK_DEST_DATE/$BASENAME" ]; then
 	break
     fi
     LINK_DEST_DATE=""
 done
 
 if [ "$LINK_DEST_DATE" ]; then
-    rsync $RSYNC_OPTIONS --link-dest="../../../$LINK_DEST_DATE" "$SRC" "$DEST/$TODAY/"
+    LINK_DEST_DATE=$(readlink -f "$DEST/$LINK_DEST_DATE")
+    [ -n "$OPT_DRYRUN" ] && RSYNC_OPTIONS="-n $RSYNC_OPTIONS"
+    force_exec rsync $RSYNC_OPTIONS --link-dest="$LINK_DEST_DATE" "$SRC" "$DEST/$TODAY/"
 else
-    rsync $RSYNC_OPTIONS "$SRC" "$DEST/$TODAY/"
+    [ -n "$OPT_DRYRUN" ] && RSYNC_OPTIONS="-n $RSYNC_OPTIONS"
+    force_exec rsync $RSYNC_OPTIONS "$SRC" "$DEST/$TODAY/"
 fi
