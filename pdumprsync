@@ -61,17 +61,13 @@ pushd . >/dev/null
 do_exec cd "$DEST"
 
 TODAY=`date '+%Y/%m/%d'`
+DEST_OWNERSHIP=${DEST_OWNER}:${DEST_GROUP}
 if [ ! -d "$TODAY" ]; then
     do_exec mkdir -p "$TODAY"
-    if [ -n "$DEST_OWNER" ]; then
-	do_exec chown $DEST_OWNER "`date '+%Y'`"
-	do_exec chown $DEST_OWNER "`date '+%Y/%m'`"
-	do_exec chown $DEST_OWNER "`date '+%Y/%m/%d'`"
-    fi
-    if [ -n "$DEST_GROUP" ]; then
-	do_exec chgrp $DEST_GROUP "`date '+%Y'`"
-	do_exec chgrp $DEST_GROUP "`date '+%Y/%m'`"
-	do_exec chgrp $DEST_GROUP "`date '+%Y/%m/%d'`"
+    if [ "$DEST_OWNERSHIP" != ":" ]; then
+	do_exec chown $DEST_OWNERSHIP "`date '+%Y'`"
+	do_exec chown $DEST_OWNERSHIP "`date '+%Y/%m'`"
+	do_exec chown $DEST_OWNERSHIP "`date '+%Y/%m/%d'`"
     fi
     if [ -n "$DEST_MODE" ]; then
 	do_exec chmod $DEST_MODE "`date '+%Y'`"
@@ -83,8 +79,8 @@ if [ ! -d "$TODAY" ]; then
 	do_exec chmod 700 "`date '+%Y/%m/%d'`"
     fi
 fi
-
 do_exec ln -sf -T "$TODAY" ./latest
+[ "$DEST_OWNERSHIP" != ":" ] && do_exec chown --no-dereference $DEST_OWNERSHIP ./latest
 
 [ -n "$OPT_VERBOSE" ] && echo "EXEC: [popd]"
 popd >/dev/null
